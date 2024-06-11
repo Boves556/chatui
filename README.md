@@ -13,7 +13,7 @@ python client.py <clientname> localhost 3490
 ```
 example:
 ```
-python chat_client.py chris localhost 3490
+python client.py chris localhost 3490
 ```
 Its important to **note** that you should open muiltiple clients with different client names to be able to text between each other.
 
