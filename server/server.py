@@ -2,13 +2,39 @@ import socket
 import select
 import sys
 import json
+import struct
+
+HEADER_LENGTH = 4
+
+def send_message(sock, message):
+    """Send a message with a header indicating its length"""
+    message_length = len(message)
+    header = struct.pack("!I", message_length)
+    sock.sendall(header + message)
+
+def receive_message(sock):
+    """Receive a message prefixed with a header indicating its length"""
+    header = b""
+    while len(header) < HEADER_LENGTH:
+        packet = sock.recv(HEADER_LENGTH - len(header))
+        if not packet:
+            return None
+        header += packet
+    message_length = struct.unpack("!I", header)[0]
+    data = b""
+    while len(data) < message_length:
+        packet = sock.recv(message_length - len(data))
+        if not packet:
+            return None
+        data += packet
+    return data
 
 def broadcast(sock, message, clients, client_names):
     """Send a message to all clients except the sender"""
     for client_socket in clients:
         if client_socket != sock:
             try:
-                client_socket.send(message)
+                send_message(client_socket, message)
             except Exception as e:
                 print(f"Error sending message: {e}")
                 client_socket.close()
@@ -30,15 +56,15 @@ def chat_server(port):
     print(f"Chat server started on port {port}.")
 
     while True:
-        read_sockets, write_sockets, error_sockets = select.select([server_socket] + clients, [], [])
+        read_sockets, _, _ = select.select([server_socket] + clients, [], [])
         for sock in read_sockets:
             if sock == server_socket:
                 sockfd, addr = server_socket.accept()
                 clients.append(sockfd)
-                print("Client (%s, %s) connected" % addr)
+                print(f"Client {addr} connected")
             else:
                 try:
-                    data = sock.recv(4096)
+                    data = receive_message(sock)
                     if data:
                         json_data = json.loads(data.decode())
                         if json_data["type"] == "hello":
@@ -55,14 +81,14 @@ def chat_server(port):
                             broadcast(sock, leave_message, clients, client_names)
                             del client_names[sock]
                 except Exception as error:
-                    print(f"Client {addr} disconnected: {error}")
+                    print(f"Client disconnected: {error}")
                     sock.close()
                     if sock in clients:
                         clients.remove(sock)
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python chat_server.py port")
+        print("Usage: python server.py port")
         sys.exit()
 
     port = int(sys.argv[1])
